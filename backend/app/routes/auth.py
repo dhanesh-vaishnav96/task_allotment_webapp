@@ -1,5 +1,5 @@
 from app.utils.email_service import send_account_email
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database.dependencies import get_db
@@ -44,27 +44,26 @@ def get_users(db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(user: LoginRequest, db: Session = Depends(get_db)):
+    try:
+        existing_user = db.query(User).filter(
+            User.email == user.email
+        ).first()
 
-    existing_user = db.query(User).filter(
-        User.email == user.email
-    ).first()
+        if not existing_user:
+            raise HTTPException(status_code=404, detail="User not found")
 
-    if not existing_user:
+        if existing_user.password != user.password:
+            raise HTTPException(status_code=401, detail="Incorrect password")
+
         return {
-            "success": False,
-            "message": "User not found"
+            "success": True,
+            "message": "Login Successful",
+            "user_id": existing_user.id,
+            "name": existing_user.name,
+            "role": existing_user.role
         }
-
-    if existing_user.password != user.password:
-        return {
-            "success": False,
-            "message": "Incorrect password"
-        }
-
-    return {
-        "success": True,
-        "message": "Login Successful",
-        "user_id": existing_user.id,
-        "name": existing_user.name,
-        "role": existing_user.role
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Server error during login: {e}")
+        raise HTTPException(status_code=500, detail="Database connection error or internal server error")
